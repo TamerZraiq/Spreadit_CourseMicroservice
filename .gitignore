@@ -3,4 +3,6 @@ __pycache__/
 *.pyc
 venv/
 .uvicorn.out
+.uvicorn.pid
 .pytest_cache
+.env.*
