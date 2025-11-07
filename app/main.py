@@ -1,44 +1,110 @@
 # app/main.py
-from fastapi import FastAPI, HTTPException, status
-from .schemas import Course
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, Depends, HTTPException, status, Response
+from fastapi.middleware.cors import CORSMiddleware
+from app.database import engine
+from app.models import Base, CourseDB
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session, selectinload
 
-app = FastAPI()
+from .database import engine, SessionLocal
+from .schemas import Course, AddCourse, UpdateCourse
+
+#Replacing @app.on_event("startup")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    Base.metadata.create_all(bind=engine)   
+    yield
+
+app = FastAPI(lifespan=lifespan)
+
 courses: list[Course] = []
 
-
-@app.get("/api/course")
-def get_course():
-    return courses
-
-@app.get("/api/course/{course_id}")
-def get_course_by_id(course_id: str):
-    for c in courses:
-        if c.course_id == course_id:
-            return c
-    raise HTTPException(status_code=404, detail="course not found")
+# CORS (add this block)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],   # dev-friendly; tighten in prod
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
-@app.post("/api/course", status_code=status.HTTP_201_CREATED)
-def add_course(course: Course):
-    if any(c.course_id == course.course_id for c in courses):
-        raise HTTPException(status_code=409, detail="course_id already exists")
-    courses.append(course)
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+def commit_or_rollback(db: Session, error_msg: str):
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=error_msg)
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+
+
+#using db to get users
+@app.get("/api/get-all-courses", response_model=list[Course])
+def get_courses(db: Session = Depends(get_db)):
+    stmt = select(CourseDB).order_by(CourseDB.id)
+    return list(db.execute(stmt).scalars())
+
+
+
+#get user by user id from db
+@app.get("/api/course-by-id/{course_id}", response_model=Course)
+def get_course(course_id: str, db: Session = Depends(get_db)):
+    course = db.query(CourseDB).filter(CourseDB.course_id == course_id).first()
+    if not course: 
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found") #if not found return 404
     return course
 
 
-@app.put("/api/course/{course_id}", status_code=status.HTTP_200_OK)
-def update_course(course_id: str, updated_course: Course):
-    for i, c in enumerate(courses):
-        if c.course_id == course_id:
-            courses[i] = updated_course
-            return updated_course
-    raise HTTPException(status_code=404, detail="course not found")
+#Add course
+@app.post("/api/add-course", response_model=AddCourse, status_code=status.HTTP_201_CREATED)
+def add_course(payload: AddCourse, db: Session = Depends(get_db)):
+    course = CourseDB(**payload.model_dump())
+    db.add(course)
+
+    commit_or_rollback(db, "Course could not be created")
+    return course
 
 
-@app.delete("/api/course/{course_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_course(course_id: str):
-    for c in courses:
-        if c.course_id == course_id:
-            courses.remove(c)
-            return
-    raise HTTPException(status_code=404, detail="course not found")
+#get course by id
+@app.get("/api/get-course-by-id/{course_id}", response_model=Course)
+def get_course(course_id: str, db: Session = Depends(get_db)):
+    course = db.query(CourseDB).filter(CourseDB.course_id == course_id).first()
+    if not course: 
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found") #if not found return 404
+    return course
+
+#update course by id
+@app.put("/api/update-course-by-id/{course_id}", status_code=status.HTTP_200_OK)
+def update_course(course_id: str, updated_course: UpdateCourse, db: Session = Depends(get_db)):
+    result = db.query(CourseDB).filter(CourseDB.course_id == course_id).update(updated_course.model_dump())
+    db.commit()
+
+    if not result:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="id not found")
+
+    return {"message": "Course updated successful"}
+
+
+#delete course by id
+@app.delete("/api/delete-course-by-id/{course_id}", status_code=status.HTTP_200_OK)
+def delete_course(course_id: str, db: Session = Depends(get_db)):
+    course = db.query(CourseDB).filter(CourseDB.course_id == course_id).first()
+    db.delete(course)
+    db.commit()
+
+    if not course:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="course_id not found")
+
+    return {"message": "Deleted Course"}
