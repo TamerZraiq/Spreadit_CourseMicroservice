@@ -2,13 +2,12 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends, HTTPException, status, Response
 from fastapi.middleware.cors import CORSMiddleware
-from app.database import engine
+from app.database import engine, SessionLocal
 from app.models import Base, CourseDB
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
-from .database import engine, SessionLocal
 from .schemas import Course, AddCourse, UpdateCourse
 
 #Replacing @app.on_event("startup")
