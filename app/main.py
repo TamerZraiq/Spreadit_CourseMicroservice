@@ -9,6 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from .schemas import Course, AddCourse, UpdateCourse
+import httpx
 
 #Replacing @app.on_event("startup")
 @asynccontextmanager
@@ -71,10 +72,8 @@ def get_course(course_id: str, db: Session = Depends(get_db)):
 def add_course(payload: AddCourse, db: Session = Depends(get_db)):
     course = CourseDB(**payload.model_dump())
     db.add(course)
-
     commit_or_rollback(db, "Course could not be created")
     return course
-
 
 #get course by id
 @app.get("/api/get-course-by-id/{course_id}", response_model=Course)
@@ -107,3 +106,27 @@ def delete_course(course_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="course_id not found")
 
     return {"message": "Deleted Course"}
+
+#enroll function
+@app.post("/courses/{course_id}/enroll/{user_id}")
+def enroll_user(course_id: str, user_id: str, db: Session = Depends(get_db)):
+    # Get course
+    course = db.query(CourseDB).filter(CourseDB.course_id == course_id).first()
+
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+
+    # Initialize list if null (sqlite json quirk)
+    if course.enrolled_users is None:
+        course.enrolled_users = []
+
+    # Prevent duplicates
+    if user_id in course.enrolled_users:
+        raise HTTPException(status_code=409, detail="User already enrolled in course")
+
+    # Add user id to course
+    course.enrolled_users.append(user_id)
+    db.commit()
+    db.refresh(course)
+
+    return {"message": f"User {user_id} enrolled in course {course_id}"}

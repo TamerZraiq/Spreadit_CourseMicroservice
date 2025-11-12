@@ -1,0 +1,24 @@
+version: "3.9"
+
+services:
+  user-service:
+    container_name: user-service
+    build: ./user       # path to your user microservice folder
+    ports:
+      - "8001:8000"
+    networks:
+      - backend
+
+  course-service:
+    container_name: course-service
+    build: ./course     # path to your course microservice folder
+    ports:
+      - "8002:8000"
+    depends_on:
+      - user-service
+    networks:
+      - backend
+
+networks:
+  backend:
+    driver: bridge
