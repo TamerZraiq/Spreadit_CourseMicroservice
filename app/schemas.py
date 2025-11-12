@@ -1,7 +1,6 @@
-# app/schemas.py
 from typing import Annotated, Optional, List
 from annotated_types import Ge, Le
-from pydantic import BaseModel, constr, conint, EmailStr, ConfigDict, StringConstraints, Field
+from pydantic import BaseModel, constr, EmailStr, ConfigDict, StringConstraints, Field
 
 CourseId = Annotated[str, StringConstraints(pattern=r"^\d{4}$")]
 CourseName = Annotated[str, StringConstraints(min_length=2, max_length=50)]
@@ -12,6 +11,7 @@ class Course(BaseModel):
     course_id: CourseId
     course_name: CourseName
     description: DescStr
+    enrolled_users: List[str] = []
 
 class AddCourse(BaseModel):
     course_id: CourseId
@@ -19,6 +19,5 @@ class AddCourse(BaseModel):
     description: DescStr
 
 class UpdateCourse(BaseModel):
-    course_id: CourseId
-    course_name: CourseName
-    description: DescStr
+    course_name: Optional[CourseName] = None
+    description: Optional[DescStr] = None
