@@ -59,16 +59,16 @@ def get_courses(db: Session = Depends(get_db)):
 
 
 #get user by user id from db
-@app.get("/api/course-by-id/{course_id}", response_model=Course)
-def get_course(course_id: str, db: Session = Depends(get_db)):
-    course = db.query(CourseDB).filter(CourseDB.course_id == course_id).first()
-    if not course: 
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found") #if not found return 404
+@app.get("/api/course-by-user-id/{user_id}", response_model=Course)
+def get_course(user_id: str, db: Session = Depends(get_db)):
+    course = db.query(CourseDB).filter(CourseDB.enrolled_users.contains([user_id])).first()
+    if not course:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found for the specific user") #if not found return 404
     return course
 
 
 #Add course
-@app.post("/api/add-course", response_model=AddCourse, status_code=status.HTTP_201_CREATED)
+@app.post("/api/add-course", response_model=Course, status_code=status.HTTP_201_CREATED)
 def add_course(payload: AddCourse, db: Session = Depends(get_db)):
     course = CourseDB(**payload.model_dump())
     db.add(course)
@@ -99,16 +99,16 @@ def update_course(course_id: str, updated_course: UpdateCourse, db: Session = De
 @app.delete("/api/delete-course-by-id/{course_id}", status_code=status.HTTP_200_OK)
 def delete_course(course_id: str, db: Session = Depends(get_db)):
     course = db.query(CourseDB).filter(CourseDB.course_id == course_id).first()
+    if not course:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="course_id not found for delete")
+
     db.delete(course)
     db.commit()
-
-    if not course:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="course_id not found")
 
     return {"message": "Deleted Course"}
 
 #enroll function
-@app.post("/courses/{course_id}/enroll/{user_id}")
+@app.post("/api/courses/{course_id}/enroll/{user_id}", status_code = status.HTTP_200_OK)
 def enroll_user(course_id: str, user_id: str, db: Session = Depends(get_db)):
     # Get course
     course = db.query(CourseDB).filter(CourseDB.course_id == course_id).first()
@@ -116,9 +116,9 @@ def enroll_user(course_id: str, user_id: str, db: Session = Depends(get_db)):
     if not course:
         raise HTTPException(status_code=404, detail="Course not found")
 
-    # Initialize list if null (sqlite json quirk)
-    if course.enrolled_users is None:
-        course.enrolled_users = []
+    # # Initialize list if null (sqlite json quirk)
+    # if course.enrolled_users is None:
+    #     course.enrolled_users = []
 
     # Prevent duplicates
     if user_id in course.enrolled_users:
