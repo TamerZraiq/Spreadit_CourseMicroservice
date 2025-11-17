@@ -1,110 +1,103 @@
-import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+def add_course_payload(course_id = "1234", course_name = "Robotics", description = "Autonomous drones", enrolled_users = []):
+    return {"course_id": course_id, "course_name": course_name, "description": description, "enrolled_users": enrolled_users}
 
-from app.main import app, get_db
-from app.models import Base
-import app.database as database  # <-- needed to override engine + SessionLocal
-from sqlalchemy.pool import StaticPool
+def get_course_payload(course_id = "1234", course_name = "Robotics", description = "Autonomous drones", id = 1, enrolled_users = []):
+    return {"course_id": course_id, "course_name": course_name, "description": description, "id": id, "enrolled_users": enrolled_users}
+####################################################################################
 
-# Use throwaway in-memory SQLite
-TEST_DB_URL = "sqlite+pysqlite:///:memory:"
-engine = create_engine(
-    TEST_DB_URL,
-    connect_args={"check_same_thread": False},
-    poolclass=StaticPool,   # <-- THIS IS THE FIX
-)
-TestingSessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
-
-# Override the DB the app uses
-database.engine = engine
-database.SessionLocal = TestingSessionLocal
-# Create tables on the SAME engine FastAPI now uses
-Base.metadata.create_all(bind=engine)
-
-@pytest.fixture
-def client():
-    # clean DB before each test
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
-    
-    def override_get_db():
-        db = TestingSessionLocal()
-        try:
-            yield db
-        finally:
-            db.close()
-
-    app.dependency_overrides[get_db] = override_get_db
-
-    with TestClient(app) as c:
-        yield c  # <-- important for lifespan to run
-
-@pytest.fixture
-def db():
-    db = TestingSessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-def test_add_course(client):
-    payload = {
-        "course_id": "1234",
-        "course_name": "Robotics",
-        "description": "Autonomous drones"
-    }
-
-    r = client.post("/api/add-course", json=payload)
-
+def test_add_course_ok(client):
+    r = client.post("/api/add-course", json = add_course_payload())
     assert r.status_code == 201
-    assert r.json()["course_id"] == "1234"
+    assert r.json() == get_course_payload()
+
+def test_add_course_invalid_course_id(client):
+    r = client.post("/api/add-course", json = {"course_id": "12", "course_name": "Robotics", "description": "Drones"})
+    assert r.status_code == 422
+
+def test_add_course_invalid_course_name(client):
+    r = client.post("/api/add-course", json = {"course_id": "1234", "course_name": "R", "description": "Drones"})
+    assert r.status_code == 422
+
+def test_add_course_invalid_description(client):
+    r = client.post("/api/add-course", json = {"course_id": "1234", "course_name": "Robotics", "description": "D" * 3000})
+    assert r.status_code == 422
+
+def test_get_all_courses_ok(client):
+    client.post("/api/add-course", json = add_course_payload())
+    client.post("/api/add-course", json = add_course_payload(course_id="5678", course_name="ML", description="AI"))
+    r = client.get("/api/get-all-courses")
+    assert r.status_code == 200
+    assert r.json() == [get_course_payload(), get_course_payload(course_id="5678", course_name="ML", description="AI", id=2)]
 
 def test_get_all_courses_empty(client):
     r = client.get("/api/get-all-courses")
     assert r.status_code == 200
     assert r.json() == []
 
-
-def test_get_course_by_id(client):
-    # insert directly using POST endpoint
-    payload = {"course_id": "1234", "course_name": "Robotics", "description": "Autonomous drones"}
-    client.post("/api/add-course", json=payload)
-
+def test_get_course_by_id_ok(client):
+    client.post("/api/add-course", json=add_course_payload())
     r = client.get("/api/get-course-by-id/1234")
     assert r.status_code == 200
-    data = r.json()
-    assert data["course_id"] == "1234"
-    assert data["course_name"] == "Robotics"
-
+    assert r.json() == get_course_payload()
 
 def test_get_course_by_id_not_found(client):
     r = client.get("/api/get-course-by-id/9999")
     assert r.status_code == 404
+    assert r.json() == {"detail": "Course not found"}
 
+def test_get_course_by_user_id_ok(client):
+    client.post("/api/add-course", json=add_course_payload())
+    client.post("/api/courses/1234/enroll/g00425075")
+    r = client.get("/api/course-by-user-id/g00425075")
+    assert r.status_code == 200
+    assert r.json() == get_course_payload(enrolled_users=["g00425075"])
 
-def test_update_course(client):
-    client.post("/api/add-course", json={"course_id": "2222", "course_name": "ML", "description": "ai sensors"})
+def test_get_course_by_user_id_not_found(client):
+    client.post("/api/add-course", json=add_course_payload())
+    client.post("/api/courses/1234/enroll/g00425075")
+    r = client.get("/api/course-by-user-id/g00425076")
+    assert r.status_code == 404
+    assert r.json() == {"detail": "Course not found for the specific user"}
 
-    updated = {"course_id": "2222", "course_name": "ML UPDATED", "description": "updated desc"}
-    r = client.put("/api/update-course-by-id/2222", json=updated)
-
+def test_update_course_ok(client):
+    client.post("/api/add-course", json = add_course_payload())
+    r = client.put("/api/update-course-by-id/1234", json = {"course_name": "CICD", "description": "CICDIDDY"})
     assert r.status_code == 200
     assert r.json() == {"message": "Course updated successful"}
 
-    # verify update actually happened
-    r2 = client.get("/api/get-course-by-id/2222")
-    assert r2.json()["course_name"] == "ML UPDATED"
+def test_update_course_not_found(client):
+    client.post("/api/add-course", json = add_course_payload())
+    r = client.put("/api/update-course-by-id/5678", json = {"course_name": "CICD", "description": "CICDIDDY"})
+    assert r.status_code == 404
+    assert r.json() == {"detail": "id not found"}
 
-
-def test_delete_course(client):
-    client.post("/api/add-course", json={"course_id": "3333", "course_name": "CICD", "description": "pipelines"})
-
-    r = client.delete("/api/delete-course-by-id/3333")
+def test_delete_course_ok(client):
+    client.post("/api/add-course", json = add_course_payload())
+    r = client.delete("/api/delete-course-by-id/1234")
     assert r.status_code == 200
     assert r.json() == {"message": "Deleted Course"}
 
-    # verify deletion
-    r2 = client.get("/api/get-course-by-id/3333")
-    assert r2.status_code == 404
+def test_delete_course_not_found(client):
+    client.post("/api/add-course", json = add_course_payload())
+    r = client.delete("/api/delete-course-by-id/5678")
+    assert r.status_code == 404
+    assert r.json() == {"detail": "course_id not found for delete"}
+
+def test_enroll_user_ok(client):
+    client.post("/api/add-course", json = add_course_payload())
+    r = client.post("/api/courses/1234/enroll/g00425075")
+    assert r.status_code == 200
+    assert r.json() == {"message": "User g00425075 enrolled in course 1234"}
+
+def test_enroll_user_course_not_found(client):
+    client.post("/api/add-course", json = add_course_payload())
+    r = client.post("/api/courses/2345/enroll/g00425075")
+    assert r.status_code == 404
+    assert r.json() == {"detail": "Course not found"}
+
+def test_enroll_user_course_already_enrolled(client):
+    client.post("/api/add-course", json = add_course_payload())
+    client.post("/api/courses/1234/enroll/g00425075")
+    r = client.post("/api/courses/1234/enroll/g00425075")
+    assert r.status_code == 409
+    assert r.json() == {"detail": "User already enrolled in course"}

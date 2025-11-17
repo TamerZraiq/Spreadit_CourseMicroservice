@@ -6,3 +6,4 @@ venv/
 .uvicorn.pid
 .pytest_cache
 .env.*
+ap.db

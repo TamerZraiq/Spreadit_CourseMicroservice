@@ -12,11 +12,13 @@ class Course(BaseModel):
     course_name: CourseName
     description: DescStr
     enrolled_users: List[str] = []
+    model_config = ConfigDict(from_attributes=True)
 
 class AddCourse(BaseModel):
     course_id: CourseId
     course_name: CourseName
     description: DescStr
+    enrolled_users: List[str] = []
 
 class UpdateCourse(BaseModel):
     course_name: Optional[CourseName] = None
