@@ -94,6 +94,23 @@ def update_course(course_id: str, updated_course: UpdateCourse, db: Session = De
 
     return {"message": "Course updated successful"}
 
+#Partial update course by ID
+@app.patch("/api/patch-course-by-id/{course_id}", status_code=status.HTTP_200_OK)
+def patch_course(course_id: str, patched_course: UpdateCourse, db: Session = Depends(get_db)):
+    course = db.query(CourseDB).filter(CourseDB.course_id == course_id).first()
+
+    if not course:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course ID not found")
+    
+    updated_field = patched_course.model_dump(exclude_unset=True)
+
+    for field, value in updated_field.items():
+        setattr(course, field, value)
+
+    commit_or_rollback(db, "Course patch failed")
+    db.refresh(course)
+    
+    return {"message": "Course patched successful"}
 
 #delete course by id
 @app.delete("/api/delete-course-by-id/{course_id}", status_code=status.HTTP_200_OK)
