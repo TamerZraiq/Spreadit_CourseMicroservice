@@ -71,6 +71,18 @@ def test_update_course_not_found(client):
     assert r.status_code == 404
     assert r.json() == {"detail": "id not found"}
 
+def test_patch_course_ok(client):
+    client.post("/api/add-course", json = add_course_payload())
+    r = client.patch("/api/patch-course-by-id/1234", json = {"course_name": "CICD2"})
+    assert r.status_code == 200
+    assert r.json() == {"message": "Course patched successful"}
+
+def test_patch_course_not_found(client):
+    client.post("/api/add-course", json = add_course_payload())
+    r = client.patch("/api/patch-course-by-id/5678", json = {"course_name": "CICD2"})
+    assert r.status_code == 404
+    assert r.json() == {"detail": "Course ID not found"}
+
 def test_delete_course_ok(client):
     client.post("/api/add-course", json = add_course_payload())
     r = client.delete("/api/delete-course-by-id/1234")
