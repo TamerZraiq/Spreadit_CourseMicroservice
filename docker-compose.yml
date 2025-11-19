@@ -1,24 +1,53 @@
 version: "3.9"
 
 services:
-  user-service:
-    container_name: user-service
-    build: ./user       # path to your user microservice folder
+  db:
+    image: postgres:17-alpine
+    env_file: .env.docker
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U \"$${POSTGRES_USER:-app}\" -d \"$${POSTGRES_DB:-appdb}\""]
+      interval: 5s
+      retries: 10
+    restart: unless-stopped
+
+  api:
+    build: .
+    env_file: .env.docker
+    environment:
+      - APP_ENV=docker
+    depends_on:
+      db:
+        condition: service_healthy
     ports:
       - "8001:8000"
-    networks:
-      - backend
+    restart: unless-stopped
 
-  course-service:
-    container_name: course-service
-    build: ./course     # path to your course microservice folder
-    ports:
-      - "8002:8000"
-    depends_on:
-      - user-service
-    networks:
-      - backend
+volumes:
+  postgres-data: {}
 
-networks:
-  backend:
-    driver: bridge
+# services:
+#   user-service:
+#     container_name: user-service
+#     build: ./user       # path to your user microservice folder
+#     ports:
+#       - "8001:8000"
+#     networks:
+#       - backend
+
+#   course-service:
+#     container_name: course-service
+#     build: ./course     # path to your course microservice folder
+#     ports:
+#       - "8002:8000"
+#     depends_on:
+#       - user-service
+#     networks:
+#       - backend
+
+# networks:
+#   backend:
+#     driver: bridge
