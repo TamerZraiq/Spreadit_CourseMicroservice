@@ -10,6 +10,9 @@ from sqlalchemy.orm import Session, selectinload
 
 from .schemas import Course, AddCourse, UpdateCourse
 import httpx
+import os
+
+MODULE_SERVICE_URL = os.getenv("MODULE_SERVICE_URL", "http://localhost:8000")
 
 #Replacing @app.on_event("startup")
 @asynccontextmanager
@@ -48,7 +51,11 @@ def commit_or_rollback(db: Session, error_msg: str):
 def health():
     return {"status": "ok"}
 
-
+@app.get("/api/proxy/modules")
+def proxy_modules():
+    with httpx.Client() as client:
+        response = client.get(f"{MODULE_SERVICE_URL}/api/module")
+    return response.json()
 
 #using db to get users
 @app.get("/api/get-all-courses", response_model=list[Course])
