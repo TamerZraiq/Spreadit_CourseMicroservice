@@ -169,12 +169,20 @@ async def add_course(payload: AddCourse, db: Session = Depends(get_db)):
     
     return course
 
-#get course by id
+#get course by course_id (string like "CS101")
 @app.get("/api/get-course-by-id/{course_id}", response_model=Course)
 def get_course(course_id: str, db: Session = Depends(get_db)):
     course = db.query(CourseDB).filter(CourseDB.course_id == course_id).first()
     if not course: 
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found") #if not found return 404
+    return course
+
+#get course by database id (integer like 1, 2, 3)
+@app.get("/api/get-course-by-db-id/{db_id}", response_model=Course)
+def get_course_by_db_id(db_id: int, db: Session = Depends(get_db)):
+    course = db.get(CourseDB, db_id)
+    if not course:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
     return course
 
 #update course by id

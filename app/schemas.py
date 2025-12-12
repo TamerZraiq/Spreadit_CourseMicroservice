@@ -2,7 +2,7 @@ from typing import Annotated, Optional, List
 from annotated_types import Ge, Le
 from pydantic import BaseModel, constr, EmailStr, ConfigDict, StringConstraints, Field
 
-CourseId = Annotated[str, StringConstraints(pattern=r"^\d{4}$")]
+CourseId = Annotated[str, StringConstraints(min_length=2, max_length=10, pattern=r"^[A-Za-z0-9]+$")]
 CourseName = Annotated[str, StringConstraints(min_length=2, max_length=50)]
 DescStr = Annotated[str, StringConstraints(min_length=0, max_length=2000)]
 
