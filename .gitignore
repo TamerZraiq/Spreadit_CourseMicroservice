@@ -5,5 +5,5 @@ venv/
 .uvicorn.out
 .uvicorn.pid
 .pytest_cache
-.env.*
+.env
 app.db
