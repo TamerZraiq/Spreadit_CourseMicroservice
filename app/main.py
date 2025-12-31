@@ -7,6 +7,8 @@ from app.models import Base, CourseDB
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm.attributes import flag_modified
+import httpx
 
 from .schemas import Course, AddCourse, UpdateCourse
 import os
@@ -164,7 +166,7 @@ async def add_course(payload: AddCourse, db: Session = Depends(get_db)):
     # Publish event
     await publish_event("course.created", {
         "course_id": course.course_id,
-        "name": course.name
+        "name": course.course_name
     })
     
     return course
@@ -268,10 +270,35 @@ async def enroll_user(course_id: str, user_id: str, db: Session = Depends(get_db
     # Publish event
     await publish_event("course.enrolled", {
         "course_id": course_id,
+        "course_db_id": course.id,
         "user_id": user_id
     })
 
     return {"message": f"User {user_id} enrolled in course {course_id}"}
+
+@app.post("/api/courses/{course_id}/unenroll/{user_id}", status_code = status.HTTP_200_OK)
+async def unenroll_user(course_id: str, user_id: str, db: Session = Depends(get_db)):
+    # Get course
+    course = db.query(CourseDB).filter(CourseDB.course_id == course_id).first()
+
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+
+    if user_id in course.enrolled_users:
+        course.enrolled_users.remove(user_id)
+        flag_modified(course, "enrolled_users")
+        db.commit()
+        db.refresh(course)
+
+        # Publish event
+        await publish_event("course.unenrolled", {
+            "course_id": course_id,
+            "course_db_id": course.id,
+            "user_id": user_id
+        })
+        return {"message": f"User {user_id} unenrolled from course {course_id}"}
+    
+    return {"message": "User was not enrolled"}
 
 @app.get("/api/proxy/modules")
 def proxy_modules():
