@@ -235,12 +235,14 @@ async def delete_course(course_id: str, db: Session = Depends(get_db)):
     if not course:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="course_id not found for delete")
 
+    course_db_id = course.id
     db.delete(course)
     db.commit()
 
     # Publish event
     await publish_event("course.deleted", {
-        "course_id": course_id
+        "course_id": course_id,
+        "course_db_id": course_db_id
     })
 
     return {"message": "Deleted Course"}
